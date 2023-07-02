@@ -155,10 +155,10 @@ class MarbleConfig(Config):
 	# define the name of the configuration
 	NAME = "marble_cfg"
 	# number of classes (background + blue marble + non-Blue marble)
-	NUM_CLASSES = 1 + 2
+	NUM_CLASSES = 1 + 1
 	# number of training steps per epoch
 	STEPS_PER_EPOCH = 100
-    #DETECTION_MIN_CONFIDENCE = 0.9 # Skip detections with < 90% confidence
+    #DETECTION_MIN_CONFIDENCE = 0.8 # Skip detections with < 90% confidence
 # prepare config
 config = MarbleConfig()
 config.display() 
@@ -248,7 +248,7 @@ print("Train mAP: %.3f" % train_mAP)
 
 #################################################
 #Test on a single image
-marbles_img = skimage.io.imread("marble_dataset/val/test1.jpg")
+marbles_img = skimage.io.imread("dataset/val/0300.jpg")
 plt.imshow(marbles_img)
 
 detected = model.detect([marbles_img])
@@ -333,7 +333,7 @@ def detect_and_color_splash(model, image_path=None, video_path=None):
         vwriter.release()
     print("Saved to ", file_name)
 
-detect_and_color_splash(model, image_path="marble_dataset/val/test4.jpg")
+detect_and_color_splash(model, image_path="dataset/val/0211.jpg")
 
 ######################################################
                          

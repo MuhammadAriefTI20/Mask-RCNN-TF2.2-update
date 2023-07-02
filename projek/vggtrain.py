@@ -27,9 +27,7 @@ class CustomDataset(utils.Dataset):
         subset: Subset to load: train or val
         """
         # Add classes according to the numbe of classes required to detect
-        self.add_class("custom", 1, "Blue_Marble")
-        self.add_class("custom",2,"Non_Blue_Marble")
-
+        self.add_class("custom", 1, "mur")
         # Train or validation dataset?
         assert subset in ["train", "val"]
         dataset_dir = os.path.join(dataset_dir, subset)
@@ -50,7 +48,7 @@ class CustomDataset(utils.Dataset):
         # }
         # We mostly care about the x and y coordinates of each region
         # Note: In VIA 2.0, regions was changed from a dict to a list.
-        annotations = json.load(open(os.path.join(dataset_dir, "labels/marbles_two_class_VGG_json_format.json")))
+        annotations = json.load(open(os.path.join(dataset_dir, "label/vgg.json")))
         annotations = list(annotations.values())  # don't need the dict keys
 
         # The VIA tool saves images in the JSON even if they don't have any
@@ -72,10 +70,8 @@ class CustomDataset(utils.Dataset):
             #Add the classes according to the requirement
             for n in custom:
                 try:
-                    if n['label']=='Blue_Marble':
+                    if n['label']=='mur':
                         num_ids.append(1)
-                    elif n['label']=='Non_Blue_Marble':
-                        num_ids.append(2)
                 except:
                     pass
 
@@ -132,7 +128,7 @@ class CustomDataset(utils.Dataset):
             super(self.__class__, self).image_reference(image_id)
 
 dataset_train = CustomDataset()
-dataset_train.load_custom("marble_dataset/", "train") 
+dataset_train.load_custom("dataset/", "train") 
 dataset_train.prepare()
 print('Train: %d' % len(dataset_train.image_ids))
 

@@ -5,7 +5,7 @@ import datetime
 import numpy as np
 import skimage.draw
 
-from mrcnn.visualize import display_instances, display_top_masks
+from mrcnn.visualize import display_instances
 from mrcnn.utils import extract_bboxes
 
 from mrcnn.utils import Dataset
@@ -16,125 +16,125 @@ from mrcnn.model import MaskRCNN
 
 
 from mrcnn import model as modellib, utils
-from PIL import Image, ImageDraw
 
 
-#########################
 
-class CocoLikeDataset(utils.Dataset):
-    """ Generates a COCO-like dataset, i.e. an image dataset annotated in the style of the COCO dataset.
-        See http://cocodataset.org/#home for more information.
-    """
-    def load_data(self, annotation_json, images_dir):
-        """ Load the coco-like dataset from json
-        Args:
-            annotation_json: The path to the coco annotations json file
-            images_dir: The directory holding the images referred to by the json file
+class CustomDataset(utils.Dataset):
+
+    def load_custom(self, dataset_dir, subset):
+        """Load a subset of the custom dataset.
+        dataset_dir: Root directory of the dataset.
+        subset: Subset to load: train or val
         """
-        # Load json from file
-        json_file = open(annotation_json)
-        coco_json = json.load(json_file)
-        json_file.close()
-        
-        # Add the class names using the base method from utils.Dataset
-        source_name = "coco_like"
-        for category in coco_json['categories']:
-            class_id = category['id']
-            class_name = category['name']
-            if class_id < 1:
-                print('Error: Class id for "{}" cannot be less than one. (0 is reserved for the background)'.format(class_name))
-                return
+        # Add classes according to the numbe of classes required to detect
+        self.add_class("custom", 1, "Blue_Marble")
+        self.add_class("custom",2,"Non_Blue_Marble")
+
+        # Train or validation dataset?
+        assert subset in ["train", "val"]
+        dataset_dir = os.path.join(dataset_dir, subset)
+
+        # Load annotations
+        # VGG Image Annotator (up to version 1.6) saves each image in the form:
+        # { 'filename': '28503151_5b5b7ec140_b.jpg',
+        #   'regions': {
+        #       '0': {
+        #           'region_attributes': {},
+        #           'shape_attributes': {
+        #               'all_points_x': [...],
+        #               'all_points_y': [...],
+        #               'name': 'polygon'}},
+        #       ... more regions ...
+        #   },
+        #   'size': 100202
+        # }
+        # We mostly care about the x and y coordinates of each region
+        # Note: In VIA 2.0, regions was changed from a dict to a list.
+        annotations = json.load(open(os.path.join(dataset_dir, "labels/marbles_two_class_VGG_json_format.json")))
+        annotations = list(annotations.values())  # don't need the dict keys
+
+        # The VIA tool saves images in the JSON even if they don't have any
+        # annotations. Skip unannotated images.
+        annotations = [a for a in annotations if a['regions']]
+
+        # Add images
+        for a in annotations:
+            # Get the x, y coordinaets of points of the polygons that make up
+            # the outline of each object instance. These are stores in the
+            # shape_attributes (see json format above)
+            # The if condition is needed to support VIA versions 1.x and 2.x.
+            polygons = [r['shape_attributes'] for r in a['regions'].values()]
+            #labelling each class in the given image to a number
+
+            custom = [s['region_attributes'] for s in a['regions'].values()]
             
-            self.add_class(source_name, class_id, class_name)
-        
-        # Get all annotations
-        annotations = {}
-        for annotation in coco_json['annotations']:
-            image_id = annotation['image_id']
-            if image_id not in annotations:
-                annotations[image_id] = []
-            annotations[image_id].append(annotation)
-        
-        # Get all images and add them to the dataset
-        seen_images = {}
-        for image in coco_json['images']:
-            image_id = image['id']
-            if image_id in seen_images:
-                print("Warning: Skipping duplicate image id: {}".format(image))
-            else:
-                seen_images[image_id] = image
+            num_ids=[]
+            #Add the classes according to the requirement
+            for n in custom:
                 try:
-                    image_file_name = image['file_name']
-                    image_width = image['width']
-                    image_height = image['height']
-                except KeyError as key:
-                    print("Warning: Skipping image (id: {}) with missing key: {}".format(image_id, key))
-                
-                image_path = os.path.abspath(os.path.join(images_dir, image_file_name))
-                image_annotations = annotations[image_id]
-                
-                # Add the image using the base method from utils.Dataset
-                self.add_image(
-                    source=source_name,
-                    image_id=image_id,
-                    path=image_path,
-                    width=image_width,
-                    height=image_height,
-                    annotations=image_annotations
-                )
-                
+                    if n['label']=='Blue_Marble':
+                        num_ids.append(1)
+                    elif n['label']=='Non_Blue_Marble':
+                        num_ids.append(2)
+                except:
+                    pass
+
+            # load_mask() needs the image size to convert polygons to masks.
+            # Unfortunately, VIA doesn't include it in JSON, so we must read
+            # the image. This is only managable since the dataset is tiny.
+            image_path = os.path.join(dataset_dir, a['filename'])
+            image = skimage.io.imread(image_path)
+            height, width = image.shape[:2]
+
+            self.add_image(
+                "custom",
+                image_id=a['filename'],  # use file name as a unique image id
+                path=image_path,
+                width=width, height=height,
+                polygons=polygons,
+                num_ids=num_ids)
+
     def load_mask(self, image_id):
-        """ Load instance masks for the given image.
-        MaskRCNN expects masks in the form of a bitmap [height, width, instances].
-        Args:
-            image_id: The id of the image to load masks for
-        Returns:
-            masks: A bool array of shape [height, width, instance count] with
-                one mask per instance.
-            class_ids: a 1D array of class IDs of the instance masks.
+        """Generate instance masks for an image.
+       Returns:
+        masks: A bool array of shape [height, width, instance count] with
+            one mask per instance.
+        class_ids: a 1D array of class IDs of the instance masks.
         """
+        # If not a custom dataset image, delegate to parent class.
         image_info = self.image_info[image_id]
-        annotations = image_info['annotations']
-        instance_masks = []
-        class_ids = []
-        
-        for annotation in annotations:
-            class_id = annotation['category_id']
-            mask = Image.new('1', (image_info['width'], image_info['height']))
-            mask_draw = ImageDraw.ImageDraw(mask, '1')
-            for segmentation in annotation['segmentation']:
-                mask_draw.polygon(segmentation, fill=1)
-                bool_array = np.array(mask) > 0
-                instance_masks.append(bool_array)
-                class_ids.append(class_id)
+        if image_info["source"] != "custom":
+            return super(self.__class__, self).load_mask(image_id)
+        num_ids = image_info['num_ids']	
+        #print("Here is the numID",num_ids)
 
-        mask = np.dstack(instance_masks)
-        class_ids = np.array(class_ids, dtype=np.int32)
-        
-        return mask, class_ids
+        # Convert polygons to a bitmap mask of shape
+        # [height, width, instance_count]
+        info = self.image_info[image_id]
+        mask = np.zeros([info["height"], info["width"], len(info["polygons"])],
+                        dtype=np.uint8)
+        for i, p in enumerate(info["polygons"]):
+            # Get indexes of pixels inside the polygon and set them to 1
+            rr, cc = skimage.draw.polygon(p['all_points_y'], p['all_points_x'])
+            mask[rr, cc, i] = 1
 
+        # Return mask, and array of class IDs of each instance. Since we have
+        # one class ID only, we return an array of 1s
+        num_ids = np.array(num_ids, dtype=np.int32)	
+        return mask, num_ids#.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32), 
 
+    def image_reference(self, image_id):
+        """Return the path of the image."""
+        info = self.image_info[image_id]
+        if info["source"] == "custom":
+            return info["path"]
+        else:
+            super(self.__class__, self).image_reference(image_id)
 
-
-##############################
-
-dataset_train = CocoLikeDataset()
-dataset_train.load_data('marble_dataset/train/labels/marbles_two_class_coco_json_format.json', 'marble_dataset/train')
+dataset_train = CustomDataset()
+dataset_train.load_custom("marble_dataset/", "train") 
 dataset_train.prepare()
-
-#In this example, I do not have annotations for my validation data, so I am loading train data
-dataset_val = CocoLikeDataset()
-dataset_val.load_data('marble_dataset/train/labels/marbles_two_class_coco_json_format.json', 'marble_dataset/train')
-dataset_val.prepare()
-
-
-dataset = dataset_train
-image_ids = dataset.image_ids
-#image_ids = np.random.choice(dataset.image_ids, 3)
-for image_id in image_ids:
-    image = dataset.load_image(image_id)
-    mask, class_ids = dataset.load_mask(image_id)
-    display_top_masks(image, mask, class_ids, dataset.class_names, limit=2)  #limit to total number of classes
+print('Train: %d' % len(dataset_train.image_ids))
 
 
 
@@ -157,7 +157,7 @@ display_instances(image, bbox, mask, class_ids, dataset_train.class_names)
 # define a configuration for the model
 class MarbleConfig(Config):
 	# define the name of the configuration
-	NAME = "marble_cfg_coco"
+	NAME = "marble_cfg"
 	# number of classes (background + blue marble + non-Blue marble)
 	NUM_CLASSES = 1 + 2
 	# number of training steps per epoch
@@ -191,6 +191,8 @@ model.load_weights(COCO_WEIGHTS_PATH, by_name=True, exclude=["mrcnn_class_logits
 # train weights (output layers or 'heads')
 model.train(dataset_train, dataset_train, learning_rate=config.LEARNING_RATE, epochs=25, layers='heads')
 
+############################
+#INFERENCE
 
 ###################################################
 from mrcnn.model import load_image_gt
@@ -204,7 +206,7 @@ from matplotlib.patches import Rectangle
 # define the prediction configuration
 class PredictionConfig(Config):
 	# define the name of the configuration
-	NAME = "marble_cfg_coco"
+	NAME = "marble_cfg"
 	# number of classes (background + Blue Marbles + Non Blue marbles)
 	NUM_CLASSES = 1 + 2
 	# Set batch size to 1 since we'll be running inference on
@@ -240,7 +242,7 @@ cfg = PredictionConfig()
 # define the model
 model = MaskRCNN(mode='inference', model_dir='logs', config=cfg)
 # load model weights
-model.load_weights('logs/mask_rcnn_marble_cfg_coco_0003.h5', by_name=True)
+model.load_weights('logs/mask_rcnn_marble_cfg_0003.h5', by_name=True)
 # evaluate model on training dataset
 train_mAP = evaluate_model(dataset_train, model, cfg)
 print("Train mAP: %.3f" % train_mAP)

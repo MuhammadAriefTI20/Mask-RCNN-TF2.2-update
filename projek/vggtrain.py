@@ -157,8 +157,8 @@ class MarbleConfig(Config):
 	# number of classes (background + blue marble + non-Blue marble)
 	NUM_CLASSES = 1 + 1
 	# number of training steps per epoch
-	STEPS_PER_EPOCH = 100
-    #DETECTION_MIN_CONFIDENCE = 0.8 # Skip detections with < 90% confidence
+	STEPS_PER_EPOCH = 10
+    DETECTION_MIN_CONFIDENCE = 0.7
 # prepare config
 config = MarbleConfig()
 config.display() 
@@ -185,7 +185,7 @@ model = MaskRCNN(mode='training', model_dir=DEFAULT_LOGS_DIR, config=config)
 # load weights (mscoco) and exclude the output layers
 model.load_weights(COCO_WEIGHTS_PATH, by_name=True, exclude=["mrcnn_class_logits", "mrcnn_bbox_fc",  "mrcnn_bbox", "mrcnn_mask"])
 # train weights (output layers or 'heads')
-model.train(dataset_train, dataset_train, learning_rate=config.LEARNING_RATE, epochs=25, layers='heads')
+model.train(dataset_train, dataset_train, learning_rate=config.LEARNING_RATE, epochs=5, layers='heads')
 
 ############################
 #INFERENCE
@@ -204,7 +204,7 @@ class PredictionConfig(Config):
 	# define the name of the configuration
 	NAME = "marble_cfg"
 	# number of classes (background + Blue Marbles + Non Blue marbles)
-	NUM_CLASSES = 1 + 2
+	NUM_CLASSES = 1 + 1
 	# Set batch size to 1 since we'll be running inference on
             # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
 	GPU_COUNT = 1

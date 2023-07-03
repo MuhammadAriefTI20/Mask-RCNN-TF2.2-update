@@ -158,7 +158,7 @@ class MarbleConfig(Config):
 	NUM_CLASSES = 1 + 1
 	# number of training steps per epoch
 	STEPS_PER_EPOCH = 10
-    DETECTION_MIN_CONFIDENCE = 0.7
+    #DETECTION_MIN_CONFIDENCE = 0.7
 # prepare config
 config = MarbleConfig()
 config.display() 
